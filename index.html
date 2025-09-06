@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cirkuitz - Circuit Diagram Editor</title>
+    <meta name="description" content="A modern circuit diagram editor with support for circuitikz.">
+    
+    <!-- MathJax for LaTeX rendering (with fallback) -->
+    <script>
+        window.MathJax = {
+            tex: {
+                packages: ['base', 'ams', 'newcommand', 'autoload', 'configmacros'],
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" 
+            onerror="console.log('MathJax CDN failed, preview will show LaTeX code only')"></script>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="logo">
+                    <span class="logo-text">Cirkuitz</span>
+                    <span class="subtitle">Circuit Diagram Editor</span>
+                </h1>
+            </div>
+            <div class="header-right">
+                <button id="export-btn" class="btn btn-primary">Export LaTeX</button>
+                <button id="clear-btn" class="btn btn-secondary">Clear</button>
+            </div>
+        </header>
+
+        <!-- Main content -->
+        <div class="main-content">
+            <!-- Toolbar -->
+            <aside class="toolbar">
+                <h3>Components</h3>
+                <div class="component-list">
+                    <button class="component-btn" data-component="resistor">
+                        <span class="component-icon">R</span>
+                        <span>Resistor</span>
+                    </button>
+                    <button class="component-btn" data-component="capacitor">
+                        <span class="component-icon">C</span>
+                        <span>Capacitor</span>
+                    </button>
+                    <button class="component-btn" data-component="inductor">
+                        <span class="component-icon">L</span>
+                        <span>Inductor</span>
+                    </button>
+                    <button class="component-btn" data-component="voltage">
+                        <span class="component-icon">V</span>
+                        <span>Voltage Source</span>
+                    </button>
+                    <button class="component-btn" data-component="current">
+                        <span class="component-icon">I</span>
+                        <span>Current Source</span>
+                    </button>
+                    <button class="component-btn" data-component="ground">
+                        <span class="component-icon">⏚</span>
+                        <span>Ground</span>
+                    </button>
+                    <button class="component-btn" data-component="wire">
+                        <span class="component-icon">—</span>
+                        <span>Wire</span>
+                    </button>
+                    <button class="component-btn" data-component="node">
+                        <span class="component-icon">•</span>
+                        <span>Node</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Canvas area -->
+            <div class="canvas-container">
+                <div class="canvas-header">
+                    <div class="canvas-controls">
+                        <button id="zoom-in" class="btn btn-icon">+</button>
+                        <button id="zoom-out" class="btn btn-icon">−</button>
+                        <button id="reset-zoom" class="btn btn-icon">⌂</button>
+                        <span class="zoom-level">100%</span>
+                    </div>
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="circuit-canvas" width="800" height="600"></canvas>
+                    <div class="grid-overlay"></div>
+                </div>
+            </div>
+
+            <!-- Preview panel -->
+            <aside class="preview-panel">
+                <h3>Preview</h3>
+                <div id="preview-container" class="preview-content">
+                    <p class="placeholder-text">Circuit preview will appear here</p>
+                </div>
+                <div class="preview-controls">
+                    <button id="update-preview" class="btn btn-small">Update Preview</button>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Export modal -->
+        <div id="export-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Export LaTeX Code</h3>
+                    <button id="close-modal" class="btn btn-icon">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Copy the LaTeX code below to use in your document:</p>
+                    <textarea id="latex-output" readonly></textarea>
+                    <div class="export-instructions">
+                        <p><strong>To use this code:</strong></p>
+                        <ol>
+                            <li>Add <code>\usepackage{circuitikz}</code> to your LaTeX preamble</li>
+                            <li>Paste the code above into your document</li>
+                            <li>Compile with a LaTeX processor that supports TikZ</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="copy-latex" class="btn btn-primary">Copy to Clipboard</button>
+                    <button id="close-export" class="btn btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
