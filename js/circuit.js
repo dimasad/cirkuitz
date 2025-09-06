@@ -338,14 +338,19 @@ export class CircuitElement {
             latex += `to[${this.component.circuitikz}] `;
         }
         
-        // Calculate end position based on component type
+        // Calculate end position based on component type and rotation
         let endX = gridX;
         let endY = -gridY;
         
         if (this.component.terminals.length > 1) {
-            // For path elements, use the actual width
-            endX = gridX + Math.round(this.width / gridSize);
-            endY = -gridY - Math.round(this.height / gridSize);
+            // For path elements, calculate end position based on rotation
+            if (Math.abs(this.rotation) < Math.PI/4) {
+                // Horizontal (rotation ≈ 0 or π)
+                endX = gridX + Math.round(this.width / gridSize) * (this.rotation > Math.PI/2 ? -1 : 1);
+            } else {
+                // Vertical (rotation ≈ ±π/2)
+                endY = -gridY + Math.round(this.height / gridSize) * (this.rotation > 0 ? -1 : 1);
+            }
         }
         
         latex += `(${endX},${endY});`;

@@ -37,6 +37,10 @@ class CircuitEditor {
             this.showExportModal();
         });
 
+        document.getElementById('export-svg-btn').addEventListener('click', () => {
+            this.exportSVG();
+        });
+
         document.getElementById('clear-btn').addEventListener('click', () => {
             if (confirm('Are you sure you want to clear the circuit?')) {
                 this.circuit.clear();
@@ -294,20 +298,28 @@ class CircuitEditor {
         // Update element size based on the distance
         const component = COMPONENTS[element.type];
         if (component && component.terminals.length > 1) {
-            // For path elements, adjust the width based on drag distance
-            // Keep the starting position and adjust width
+            // For path elements, adjust the width/height based on drag direction
             const distance = Math.sqrt(dx * dx + dy * dy);
-            element.width = Math.max(component.width, distance);
             
-            // For horizontal/vertical alignment, snap to major axes
+            // Determine if this should be horizontal or vertical
             if (Math.abs(dx) > Math.abs(dy)) {
                 // Horizontal alignment
                 element.width = Math.abs(dx);
                 element.height = component.height;
+                element.rotation = dx < 0 ? Math.PI : 0; // Flip if dragging left
+                // Adjust position if dragging to the left
+                if (dx < 0) {
+                    element.x = endPos.x;
+                }
             } else {
-                // Vertical alignment - for now keep horizontal, but could rotate
-                element.width = Math.abs(dx);
-                element.height = component.height;
+                // Vertical alignment
+                element.width = component.height; // Use original height as width
+                element.height = Math.abs(dy);
+                element.rotation = dy < 0 ? -Math.PI/2 : Math.PI/2; // Rotate 90 degrees
+                // Adjust position if dragging upward
+                if (dy < 0) {
+                    element.y = endPos.y;
+                }
             }
         }
     }
@@ -394,6 +406,168 @@ class CircuitEditor {
         output.value = latex;
         
         modal.classList.remove('hidden');
+    }
+
+    async exportSVG() {
+        // Since MathJax doesn't support circuitikz directly, we'll export the canvas as SVG
+        // by creating an SVG representation of the circuit elements
+        
+        const bounds = this.circuit.getBounds();
+        if (this.circuit.elements.length === 0) {
+            alert('No circuit elements to export. Please add components first.');
+            return;
+        }
+        
+        // Create SVG
+        const svgWidth = bounds.width + 100; // Add padding
+        const svgHeight = bounds.height + 100;
+        const svgNS = 'http://www.w3.org/2000/svg';
+        
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('width', svgWidth);
+        svg.setAttribute('height', svgHeight);
+        svg.setAttribute('viewBox', `${bounds.x - 50} ${bounds.y - 50} ${svgWidth} ${svgHeight}`);
+        svg.setAttribute('xmlns', svgNS);
+        
+        // Add styles
+        const style = document.createElementNS(svgNS, 'style');
+        style.textContent = `
+            .component { stroke: #333; fill: none; stroke-width: 2; }
+            .text { font-family: sans-serif; font-size: 12px; fill: #333; text-anchor: middle; }
+        `;
+        svg.appendChild(style);
+        
+        // Convert each circuit element to SVG
+        this.circuit.elements.forEach(element => {
+            const group = this.createSVGElement(element, svgNS);
+            if (group) {
+                svg.appendChild(group);
+            }
+        });
+        
+        // Create download
+        const svgData = new XMLSerializer().serializeToString(svg);
+        const blob = new Blob([svgData], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'circuit.svg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+    
+    createSVGElement(element, svgNS) {
+        const group = document.createElementNS(svgNS, 'g');
+        group.setAttribute('transform', `translate(${element.x + element.width/2}, ${element.y + element.height/2}) rotate(${element.rotation * 180/Math.PI}) translate(${-element.width/2}, ${-element.height/2})`);
+        
+        const path = document.createElementNS(svgNS, 'path');
+        path.setAttribute('class', 'component');
+        
+        let pathData = '';
+        
+        switch (element.type) {
+            case 'resistor':
+                pathData = this.getResistorPath(element);
+                break;
+            case 'capacitor':
+                pathData = this.getCapacitorPath(element);
+                break;
+            case 'inductor':
+                pathData = this.getInductorPath(element);
+                break;
+            case 'voltage':
+                pathData = this.getVoltageSourcePath(element);
+                break;
+            case 'current':
+                pathData = this.getCurrentSourcePath(element);
+                break;
+            case 'ground':
+                pathData = this.getGroundPath(element);
+                break;
+            case 'wire':
+                pathData = this.getWirePath(element);
+                break;
+            case 'node':
+                pathData = this.getNodePath(element);
+                break;
+        }
+        
+        path.setAttribute('d', pathData);
+        group.appendChild(path);
+        
+        return group;
+    }
+    
+    getResistorPath(element) {
+        const w = element.width;
+        const h = element.height;
+        let path = `M 0,${h/2} L ${w * 0.2},${h/2}`;
+        
+        // Zigzag pattern
+        for (let i = 0; i < 6; i++) {
+            const x = w * 0.2 + (i * w * 0.6 / 6);
+            const y = h/2 + (i % 2 === 0 ? -h/4 : h/4);
+            path += ` L ${x},${y}`;
+        }
+        path += ` L ${w * 0.8},${h/2} L ${w},${h/2}`;
+        return path;
+    }
+    
+    getCapacitorPath(element) {
+        const w = element.width;
+        const h = element.height;
+        return `M 0,${h/2} L ${w * 0.4},${h/2} M ${w * 0.4},${h * 0.2} L ${w * 0.4},${h * 0.8} M ${w * 0.6},${h * 0.2} L ${w * 0.6},${h * 0.8} M ${w * 0.6},${h/2} L ${w},${h/2}`;
+    }
+    
+    getInductorPath(element) {
+        const w = element.width;
+        const h = element.height;
+        let path = `M 0,${h/2} L ${w * 0.2},${h/2}`;
+        
+        // Coils
+        for (let i = 0; i < 4; i++) {
+            const centerX = w * 0.2 + (i + 0.5) * w * 0.6 / 4;
+            const radius = w * 0.6 / 8;
+            path += ` M ${centerX - radius},${h/2} A ${radius},${radius} 0 0,1 ${centerX + radius},${h/2}`;
+        }
+        path += ` M ${w * 0.8},${h/2} L ${w},${h/2}`;
+        return path;
+    }
+    
+    getVoltageSourcePath(element) {
+        const w = element.width;
+        const h = element.height;
+        const radius = w * 0.3;
+        return `M 0,${h/2} L ${w * 0.2},${h/2} M ${w/2 - radius},${h/2} A ${radius},${radius} 0 1,1 ${w/2 + radius},${h/2} M ${w * 0.8},${h/2} L ${w},${h/2}`;
+    }
+    
+    getCurrentSourcePath(element) {
+        const w = element.width;
+        const h = element.height;
+        const radius = w * 0.3;
+        return `M 0,${h/2} L ${w * 0.2},${h/2} M ${w/2 - radius},${h/2} A ${radius},${radius} 0 1,1 ${w/2 + radius},${h/2} M ${w * 0.4},${h/2} L ${w * 0.6},${h/2} M ${w * 0.55},${h * 0.4} L ${w * 0.6},${h/2} L ${w * 0.55},${h * 0.6} M ${w * 0.8},${h/2} L ${w},${h/2}`;
+    }
+    
+    getGroundPath(element) {
+        const w = element.width;
+        const h = element.height;
+        return `M ${w/2},0 L ${w/2},${h * 0.4} M ${w * 0.2},${h * 0.4} L ${w * 0.8},${h * 0.4} M ${w * 0.3},${h * 0.6} L ${w * 0.7},${h * 0.6} M ${w * 0.4},${h * 0.8} L ${w * 0.6},${h * 0.8}`;
+    }
+    
+    getWirePath(element) {
+        const w = element.width;
+        const h = element.height;
+        return `M 0,${h/2} L ${w},${h/2}`;
+    }
+    
+    getNodePath(element) {
+        const w = element.width;
+        const h = element.height;
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        return `M ${w/2},${h/2} m -${w/2},0 a ${w/2},${w/2} 0 1,1 ${w},0 a ${w/2},${w/2} 0 1,1 -${w},0`;
     }
 }
 
