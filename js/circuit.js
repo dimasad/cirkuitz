@@ -78,6 +78,10 @@ export class CircuitElement {
         this.value = '';
         this.selected = false;
         this.component = COMPONENTS[type];
+        
+        // Allow custom width/height, defaulting to component defaults
+        this.width = this.component.width;
+        this.height = this.component.height;
     }
 
     // Get element bounds
@@ -85,8 +89,8 @@ export class CircuitElement {
         return {
             x: this.x,
             y: this.y,
-            width: this.component.width,
-            height: this.component.height
+            width: this.width,
+            height: this.height
         };
     }
 
@@ -110,17 +114,17 @@ export class CircuitElement {
         ctx.save();
         
         // Apply transformations
-        ctx.translate(this.x + this.component.width / 2, this.y + this.component.height / 2);
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
         ctx.rotate(this.rotation);
         ctx.scale(scale, scale);
-        ctx.translate(-this.component.width / 2, -this.component.height / 2);
+        ctx.translate(-this.width / 2, -this.height / 2);
 
         // Draw selection highlight
         if (this.selected) {
             ctx.strokeStyle = '#2563eb';
             ctx.lineWidth = 2;
             ctx.setLineDash([5, 5]);
-            ctx.strokeRect(-5, -5, this.component.width + 10, this.component.height + 10);
+            ctx.strokeRect(-5, -5, this.width + 10, this.height + 10);
             ctx.setLineDash([]);
         }
 
@@ -163,10 +167,10 @@ export class CircuitElement {
             ctx.textAlign = 'center';
             
             if (this.label) {
-                ctx.fillText(this.label, this.component.width / 2, -8);
+                ctx.fillText(this.label, this.width / 2, -8);
             }
             if (this.value) {
-                ctx.fillText(this.value, this.component.width / 2, this.component.height + 20);
+                ctx.fillText(this.value, this.width / 2, this.height + 20);
             }
         }
 
@@ -174,8 +178,8 @@ export class CircuitElement {
     }
 
     drawResistor(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         // Draw terminals
         ctx.beginPath();
@@ -196,8 +200,8 @@ export class CircuitElement {
     }
 
     drawCapacitor(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         // Draw terminals
         ctx.beginPath();
@@ -215,8 +219,8 @@ export class CircuitElement {
     }
 
     drawInductor(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         // Draw terminals
         ctx.beginPath();
@@ -235,8 +239,8 @@ export class CircuitElement {
     }
 
     drawVoltageSource(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         // Draw terminals
         ctx.beginPath();
@@ -258,8 +262,8 @@ export class CircuitElement {
     }
 
     drawCurrentSource(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         // Draw terminals
         ctx.beginPath();
@@ -283,8 +287,8 @@ export class CircuitElement {
     }
 
     drawGround(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         ctx.beginPath();
         // Main line
@@ -302,8 +306,8 @@ export class CircuitElement {
     }
 
     drawWire(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         ctx.beginPath();
         ctx.moveTo(0, h/2);
@@ -312,8 +316,8 @@ export class CircuitElement {
     }
 
     drawNode(ctx) {
-        const w = this.component.width;
-        const h = this.component.height;
+        const w = this.width;
+        const h = this.height;
         
         ctx.beginPath();
         ctx.arc(w/2, h/2, w/2, 0, Math.PI * 2);
@@ -339,9 +343,9 @@ export class CircuitElement {
         let endY = -gridY;
         
         if (this.component.terminals.length > 1) {
-            const lastTerminal = this.component.terminals[this.component.terminals.length - 1];
-            endX = gridX + Math.round(lastTerminal.x / gridSize);
-            endY = -gridY - Math.round(lastTerminal.y / gridSize);
+            // For path elements, use the actual width
+            endX = gridX + Math.round(this.width / gridSize);
+            endY = -gridY - Math.round(this.height / gridSize);
         }
         
         latex += `(${endX},${endY});`;

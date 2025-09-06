@@ -12,6 +12,11 @@ class CircuitEditor {
         this.zoom = 1;
         this.pan = { x: 0, y: 0 };
         
+        // Track component placement state
+        this.placingComponent = false;
+        this.placementStart = null;
+        this.tempElement = null;
+        
         this.initializeUI();
         this.setupEventListeners();
         this.resizeCanvas();
@@ -36,7 +41,6 @@ class CircuitEditor {
             if (confirm('Are you sure you want to clear the circuit?')) {
                 this.circuit.clear();
                 this.draw();
-                this.updatePreview();
             }
         });
 
@@ -55,10 +59,7 @@ class CircuitEditor {
             this.draw();
         });
 
-        // Setup preview update
-        document.getElementById('update-preview').addEventListener('click', () => {
-            this.updatePreview();
-        });
+
 
         // Setup export modal
         this.setupExportModal();
@@ -119,7 +120,22 @@ class CircuitEditor {
         if (selectedBtn) {
             selectedBtn.classList.add('active');
             this.selectedTool = toolName;
+            
+            // Reset placement state when changing tools
+            this.placingComponent = false;
+            this.placementStart = null;
+            this.tempElement = null;
         }
+    }
+
+    // Helper function to check if component is a path element
+    isPathElement(componentType) {
+        return ['resistor', 'capacitor', 'inductor', 'voltage', 'current', 'wire'].includes(componentType);
+    }
+
+    // Helper function to check if component is a node element
+    isNodeElement(componentType) {
+        return ['ground', 'node'].includes(componentType);
     }
 
     getMousePos(e) {
@@ -142,12 +158,35 @@ class CircuitEditor {
         const snappedPos = this.snapToGrid(pos.x, pos.y);
         
         if (this.selectedTool && COMPONENTS[this.selectedTool]) {
-            // Create new component
-            const element = new CircuitElement(this.selectedTool, snappedPos.x, snappedPos.y);
-            this.circuit.addElement(element);
-            this.circuit.selectElement(element);
-            this.draw();
-            this.updatePreview();
+            if (this.isPathElement(this.selectedTool)) {
+                // Start placing path element with click-and-drag
+                if (!this.placingComponent) {
+                    // First click - start placement
+                    this.placingComponent = true;
+                    this.placementStart = snappedPos;
+                    this.tempElement = new CircuitElement(this.selectedTool, snappedPos.x, snappedPos.y);
+                } else {
+                    // Second click - finish placement
+                    if (this.tempElement) {
+                        // Update the end position based on mouse position
+                        this.updatePathElementEnd(this.tempElement, snappedPos);
+                        this.circuit.addElement(this.tempElement);
+                        this.circuit.selectElement(this.tempElement);
+                    }
+                    
+                    // Reset placement state
+                    this.placingComponent = false;
+                    this.placementStart = null;
+                    this.tempElement = null;
+                }
+                this.draw();
+            } else if (this.isNodeElement(this.selectedTool)) {
+                // Single click placement for node elements
+                const element = new CircuitElement(this.selectedTool, snappedPos.x, snappedPos.y);
+                this.circuit.addElement(element);
+                this.circuit.selectElement(element);
+                this.draw();
+            }
         } else {
             // Select or drag existing element
             const clickedElement = this.circuit.getElementAt(pos.x, pos.y);
@@ -166,8 +205,10 @@ class CircuitEditor {
     }
 
     handleMouseMove(e) {
+        const pos = this.getMousePos(e);
+        
         if (this.isDragging && this.dragElement) {
-            const pos = this.getMousePos(e);
+            // Handle dragging existing elements
             const snappedPos = this.snapToGrid(
                 pos.x - this.dragStartPos.x, 
                 pos.y - this.dragStartPos.y
@@ -176,6 +217,11 @@ class CircuitEditor {
             this.dragElement.x = snappedPos.x;
             this.dragElement.y = snappedPos.y;
             this.draw();
+        } else if (this.placingComponent && this.tempElement && this.placementStart) {
+            // Handle path element placement preview
+            const snappedPos = this.snapToGrid(pos.x, pos.y);
+            this.updatePathElementEnd(this.tempElement, snappedPos);
+            this.draw();
         }
     }
 
@@ -183,7 +229,6 @@ class CircuitEditor {
         if (this.isDragging) {
             this.isDragging = false;
             this.dragElement = null;
-            this.updatePreview();
         }
     }
 
@@ -209,12 +254,17 @@ class CircuitEditor {
                 if (this.circuit.selectedElements.length > 0) {
                     this.circuit.deleteSelected();
                     this.draw();
-                    this.updatePreview();
                 }
                 break;
             case 'Escape':
                 this.selectedTool = null;
                 this.circuit.clearSelection();
+                
+                // Cancel any ongoing placement
+                this.placingComponent = false;
+                this.placementStart = null;
+                this.tempElement = null;
+                
                 document.querySelectorAll('.component-btn').forEach(btn => {
                     btn.classList.remove('active');
                 });
@@ -231,6 +281,34 @@ class CircuitEditor {
                     this.draw();
                 }
                 break;
+        }
+    }
+
+    // Helper function to update path element end position during placement
+    updatePathElementEnd(element, endPos) {
+        if (!element || !this.placementStart) return;
+        
+        const dx = endPos.x - this.placementStart.x;
+        const dy = endPos.y - this.placementStart.y;
+        
+        // Update element size based on the distance
+        const component = COMPONENTS[element.type];
+        if (component && component.terminals.length > 1) {
+            // For path elements, adjust the width based on drag distance
+            // Keep the starting position and adjust width
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            element.width = Math.max(component.width, distance);
+            
+            // For horizontal/vertical alignment, snap to major axes
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal alignment
+                element.width = Math.abs(dx);
+                element.height = component.height;
+            } else {
+                // Vertical alignment - for now keep horizontal, but could rotate
+                element.width = Math.abs(dx);
+                element.height = component.height;
+            }
         }
     }
 
@@ -258,76 +336,55 @@ class CircuitEditor {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Apply transformations
+        // Draw grid first (before transformations)
+        this.drawGrid();
+        
+        // Apply transformations for circuit elements
         this.ctx.save();
         this.ctx.translate(this.pan.x, this.pan.y);
         this.ctx.scale(this.zoom, this.zoom);
-        
-        // Draw grid
-        this.drawGrid();
         
         // Draw all circuit elements
         this.circuit.elements.forEach(element => {
             element.draw(this.ctx);
         });
         
+        // Draw temporary element during placement
+        if (this.tempElement && this.placingComponent) {
+            this.ctx.save();
+            this.ctx.globalAlpha = 0.7; // Make it semi-transparent
+            this.tempElement.draw(this.ctx);
+            this.ctx.restore();
+        }
+        
         this.ctx.restore();
     }
 
     drawGrid() {
-        const gridSize = 20;
-        const startX = Math.floor(-this.pan.x / this.zoom / gridSize) * gridSize;
-        const startY = Math.floor(-this.pan.y / this.zoom / gridSize) * gridSize;
-        const endX = startX + (this.canvas.width / this.zoom) + gridSize;
-        const endY = startY + (this.canvas.height / this.zoom) + gridSize;
+        const gridSize = 20 * this.zoom;
+        const offsetX = this.pan.x % gridSize;
+        const offsetY = this.pan.y % gridSize;
 
         this.ctx.strokeStyle = '#f0f0f0';
-        this.ctx.lineWidth = 1 / this.zoom;
+        this.ctx.lineWidth = 1;
         this.ctx.beginPath();
 
         // Vertical lines
-        for (let x = startX; x <= endX; x += gridSize) {
-            this.ctx.moveTo(x, startY);
-            this.ctx.lineTo(x, endY);
+        for (let x = offsetX; x <= this.canvas.width; x += gridSize) {
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
         }
 
         // Horizontal lines
-        for (let y = startY; y <= endY; y += gridSize) {
-            this.ctx.moveTo(startX, y);
-            this.ctx.lineTo(endX, y);
+        for (let y = offsetY; y <= this.canvas.height; y += gridSize) {
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
         }
 
         this.ctx.stroke();
     }
 
-    async updatePreview() {
-        const previewContainer = document.getElementById('preview-container');
-        const latex = this.circuit.toLatex();
-        
-        if (this.circuit.elements.length === 0) {
-            previewContainer.innerHTML = '<p class="placeholder-text">Circuit preview will appear here</p>';
-            return;
-        }
 
-        try {
-            previewContainer.innerHTML = '<div class="loading">Rendering preview...</div>';
-            
-            // Create a container for MathJax
-            const mathContainer = document.createElement('div');
-            mathContainer.innerHTML = `$$${latex}$$`;
-            
-            previewContainer.innerHTML = '';
-            previewContainer.appendChild(mathContainer);
-            
-            // Render with MathJax
-            if (window.MathJax && window.MathJax.typesetPromise) {
-                await window.MathJax.typesetPromise([mathContainer]);
-            }
-        } catch (error) {
-            console.error('Preview rendering error:', error);
-            previewContainer.innerHTML = '<p class="placeholder-text">Preview not available</p>';
-        }
-    }
 
     showExportModal() {
         const modal = document.getElementById('export-modal');
